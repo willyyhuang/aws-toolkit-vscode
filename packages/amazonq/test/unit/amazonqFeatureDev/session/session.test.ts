@@ -18,7 +18,8 @@ import {
     sessionWriteFile,
     assertTelemetry,
 } from 'aws-core-vscode/test'
-import { CurrentWsFolders, CodeGenState, FeatureDevClient, Messenger } from 'aws-core-vscode/amazonqFeatureDev'
+import { CurrentWsFolders, CodeGenState, FeatureDevClient, featureDevScheme } from 'aws-core-vscode/amazonqFeatureDev'
+import { Messenger } from 'aws-core-vscode/amazonq'
 import path from 'path'
 import { fs } from 'aws-core-vscode/shared'
 
@@ -36,8 +37,7 @@ describe('session', () => {
 
     describe('preloader', () => {
         it('emits start chat telemetry', async () => {
-            const session = await createSession({ messenger, conversationID })
-            session.latestMessage = 'implement twosum in typescript'
+            const session = await createSession({ messenger, conversationID, scheme: featureDevScheme })
 
             await session.preloader()
 
@@ -64,7 +64,7 @@ describe('session', () => {
             const tabID = '123'
             const workspaceFolders = [controllerSetup.workspaceFolder] as CurrentWsFolders
             workspaceFolderUriFsPath = controllerSetup.workspaceFolder.uri.fsPath
-            uri = generateVirtualMemoryUri(uploadID, notRejectedFileName)
+            uri = generateVirtualMemoryUri(uploadID, notRejectedFileName, featureDevScheme)
 
             const testConfig = {
                 conversationId: conversationID,
@@ -84,14 +84,16 @@ describe('session', () => {
                         rejected: false,
                         virtualMemoryUri: uri,
                         workspaceFolder: controllerSetup.workspaceFolder,
+                        changeApplied: false,
                     },
                     {
                         zipFilePath: 'rejectedFile.js',
                         relativePath: 'rejectedFile.js',
                         fileContent: 'rejectedFileContent',
                         rejected: true,
-                        virtualMemoryUri: generateVirtualMemoryUri(uploadID, 'rejectedFile.js'),
+                        virtualMemoryUri: generateVirtualMemoryUri(uploadID, 'rejectedFile.js', featureDevScheme),
                         workspaceFolder: controllerSetup.workspaceFolder,
+                        changeApplied: false,
                     },
                 ],
                 [],
@@ -100,7 +102,12 @@ describe('session', () => {
                 0,
                 {}
             )
-            const session = await createSession({ messenger, sessionState: codeGenState, conversationID })
+            const session = await createSession({
+                messenger,
+                sessionState: codeGenState,
+                conversationID,
+                scheme: featureDevScheme,
+            })
             encodedContent = new TextEncoder().encode(notRejectedFileContent)
             await sessionRegisterProvider(session, uri, encodedContent)
             return session
@@ -108,6 +115,7 @@ describe('session', () => {
         it('only insert non rejected files', async () => {
             const fsSpyWriteFile = sinon.spy(fs, 'writeFile')
             const session = await createCodeGenState()
+            sinon.stub(session, 'sendLinesOfCodeAcceptedTelemetry').resolves()
             await sessionWriteFile(session, uri, encodedContent)
             await session.insertChanges()
 
